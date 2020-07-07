@@ -13,8 +13,8 @@ library(data.table)
 library(timeDate)
 
 #### INPUTS ####
-start <- "2020/05/01" #date in format "YYYY/mm/dd"
-end <- "2020/05/31" #date in format "YYYY/mm/dd"
+start <- "2020/06/01" #date in format "YYYY/mm/dd"
+end <- "2020/06/30" #date in format "YYYY/mm/dd"
 month <- FALSE
 daily <- TRUE
 
@@ -125,6 +125,7 @@ TD_TransactionImport <- function(td_filepath){
 td_data <- TD_TransactionImport(td_filepaths)
 #change to dt so we can rolljoin later
 td_dt <- data.table(td_data)
+setnames(td_dt,"Date and Time","Date.and.Time")
 
 #### TD CLEANING ####
 #find the records that count as ridership, according to the rules
@@ -175,90 +176,66 @@ routesum_ridership[,c("Route",
 
 
 #### VMH_Import ####
-con <- con <- DBI::dbConnect(odbc::odbc(), Driver = "SQL Server", Server = "REPSQLP01VW", 
+con <- DBI::dbConnect(odbc::odbc(), Driver = "SQL Server", Server = "REPSQLP01VW", 
                              Database = "TransitAuthority_IndyGo_Reporting", 
                              Port = 1433)
 
 #we'll need these for our query of the database
-VMH_StartTime <- start_date + (60*60*3)
-VMH_EndTime <- end_date + (60*60*24) + (60*60*3)
+#VMH_StartTime <- start_date + (60*60*3)
+# get start time in yyyymmdd with no spaces
+VMH_StartTime <- str_remove_all(start_date,"-")
+VMH_EndTime <- str_remove_all(end_date,"-")
 
-VMH_Raw <- tbl(con, dbplyr::in_schema("avl", "Vehicle_Message_History")) %>%
-  filter(Time > VMH_StartTime, Time < VMH_EndTime,
-         Route_Name %like% "90%", Route %like% "90%") %>%
-  collect()
-
-AVL_Raw <- tbl(con, dbplyr::in_schema("avl","Vehicle_Avl_History")) %>%
-  filter(Time>VMH_StartTime, Time < VMH_EndTime) %>%
-  collect()
+#paste0 the query
+VMH_Raw <- tbl(con,sql(paste0("select a.Time
+,a.Route
+,Boards
+,Alights
+,Trip
+,Vehicle_ID
+,Stop_Name
+,Stop_Id
+,Inbound_Outbound
+,Departure_Time
+,Latitude
+,Longitude
+,GPSStatus
+from avl.Vehicle_Message_History a (nolock)
+left join avl.Vehicle_Avl_History b
+on a.Avl_History_Id = b.Avl_History_Id
+where a.Route like '90%'
+and a.Time > '",VMH_StartTime,"'
+and a.Time < DATEADD(day,1,'",VMH_EndTime,"')"))) %>% collect()
 
 #set the DT's and keys
-setDT(AVL_Raw,key = "Avl_History_Id")
-setDT(VMH_Raw,key = "Avl_History_Id")
+setDT(VMH_Raw)
 
 #### VMH CLEANING ####
-VMH_Raw_test <- copy(VMH_Raw)
-#test left join
-VMH_Raw_test[AVL_Raw, on = 'Avl_History_Id',`:=` (Latitude = i.Latitude
-                                                  ,Longitude = i.Longitude
-                                                  ,GPSStatus = i.GPSStatus)]
+# do transit day
+VMH_Raw[, c("ClockTime","Date") := list(str_sub(Time, 12, 19),str_sub(Time, 1, 10))
+        ][, DateTest := ifelse(ClockTime<"03:00:00",1,0)
+          ][, Transit_Day := ifelse(DateTest ==1
+                                    ,as_date(Date)-1
+                                    ,as_date(Date))
+            ][,Transit_Day := as_date("1970-01-01")+days(Transit_Day)
+              ][, jointime := fasttime::fastPOSIXct(Time, tz="UTC")]
 
-#now do transit day
-VMH_Raw_test[, c("ClockTime","Date") := list(str_sub(Time, 12, 19),str_sub(Time, 1, 10))
-             ][, DateTest := ifelse(ClockTime<"03:00:00",1,0)
-               ][, Transit_Day := ifelse(DateTest ==1
-                                         ,as_date(Date)-1
-                                         ,as_date(Date))
-                 ][,Transit_Day := as_date("1970-01-01")+days(Transit_Day)
-                  ][, jointime := fasttime::fastPOSIXct(Time, tz="UTC")]
 
 #clean up the columns to save space
-VMH_Raw_test[,c("Message_Type_Id",
-             "OffRouteStatus",
-             "CommStatus",
-             "OperationalStatus",
-             "Server_Time",
-             "Route",
-             "Inbound_Outbound",
-             "Deviation",
-             "Vehicle_Name",
-             "Run_Id",
-             "Run_Name",
-             "Stop_Name",
-             "Operator_Record_Id",
-             "Route_Name",
-             "Stop_Report",
-             "Scheduled_Headway",
-             "Target_Headway",
-             "Alarm_State",
-             "Confidence_Level",
-             "Stop_Dwell_Time",
-             "PTV_Health_Alert",
-             "Avl_History_Id",
-             "Stop_Id",
-             "StationaryStatus",
-             "StationaryDuration",
-             "VehicleStatusID",
-             "Veh_Type_Id",
-             "Block_Farebox_Id",
-             "OdometerValue",
-             "MDTFlags",
-             "Previous_Stop_Id",
-             "Distance",
-             "Door_Cycle_Count",
-             "Departure_Time",
-             "HeadwayStatus",
-             "ActualHeadway",
-             "Block_External_Id",
-             "ClockTime",
-             "Date",
-             "DateTest"):=NULL][,Vehicle_ID := as.character(Vehicle_ID)]
+VMH_Raw[,c("Route",
+           "Inbound_Outbound",
+           "Stop_Name",
+           "Stop_Id",
+           "Departure_Time",
+           "ClockTime",
+           "Date",
+           "DateTest"):=NULL][,Vehicle_ID := as.character(Vehicle_ID)]
 
 #set the key so we can roll
-setkey(VMH_Raw_test, Vehicle_ID, Transit_Day, jointime)
-key(VMH_Raw_test)
+setkey(VMH_Raw, Vehicle_ID, Transit_Day, jointime)
+
 #### ROLL JOIN ####
-rolljointable <- VMH_Raw_test[td_90_ridership_records, on = c(Vehicle_ID = "Vehicle_ID", Transit_Day="Transit_Day", jointime = "jointime"),roll=T,allow=F,mult="last"] %>%
+rolljointable <- VMH_Raw[td_90_ridership_records, on = c(Vehicle_ID = "Vehicle_ID", Transit_Day="Transit_Day", jointime = "jointime"),roll=T,rollends=c(T,T)] %>%
   select(VMH_Time = Time,
          TD_Time = Date.and.Time,
          jointime,
@@ -266,10 +243,12 @@ rolljointable <- VMH_Raw_test[td_90_ridership_records, on = c(Vehicle_ID = "Vehi
          everything())
 
 
+
 #### VALIDATE RESULTS ####
 #set max times
-rolljointable[VMH_Raw_test[,max(fasttime::fastPOSIXct(Time, tz = "UTC")),.(Vehicle_ID,Transit_Day)], on = .(Vehicle_ID,Transit_Day),
-             `:=` (maxtime = V1)]
+rolljointable[VMH_Raw[,max(fasttime::fastPOSIXct(Time, tz = "UTC")),.(Vehicle_ID,Transit_Day)]
+              , on = .(Vehicle_ID,Transit_Day)
+              ,`:=` (maxtime = V1)]
 
 #add timediffs
 rolljointable[,timediffs := as.difftime(as.ITime(TD_Time)-as.ITime(VMH_Time),units = "secs")]
@@ -278,20 +257,15 @@ rolljointable[,timediffs := as.difftime(as.ITime(TD_Time)-as.ITime(VMH_Time),uni
 TD_After_VMH <- rolljointable[as.POSIXct(TD_Time, tz= "UTC") > as.POSIXct(maxtime, tz="UTC")]
 
 #find how many TD's are between start and end but have a large gap, here we've used 1.5 minutes, in seconds
-TD_gap_data <- rolljointable[as.POSIXct(TD_Time, tz = "UTC") < as.POSIXct(maxtime,tz="UTC") & timediffs > 60*1.5]
+TD_gap_data <- rolljointable[(as.POSIXct(TD_Time, tz = "UTC") < as.POSIXct(maxtime,tz="UTC") & timediffs > 60*1.5) | is.na(timediffs)]
 
 #find how many TD's had bad GPS data
 TD_Bad_GPS <- rolljointable[GPSStatus != 2 | is.na(GPSStatus)]
 
-
-
 TD_Questionable_PCT <- rbind(TD_After_VMH,TD_gap_data,TD_Bad_GPS)[,.N/nrow(rolljointable)]
-
+TD_Questionable_PCT
 
 #### DO THE SPLIT ####
-#set boundaries
-north_boundary <- 39.877512
-south_boundary <- 39.709468
 #set boundaries
 north_boundary <- 39.877512
 south_boundary <- 39.709468
