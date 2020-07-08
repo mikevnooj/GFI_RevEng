@@ -129,9 +129,8 @@ setnames(td_dt,"Date and Time","Date.and.Time")
 
 #### TD CLEANING ####
 #find the records that count as ridership, according to the rules
-td_90_ridership_records <- td_dt[Route %in% c("90","901","902")
+td_90_ridership_records <- td_dt[Bus %in% c(1899,1970:1999)
                          ][Description %in% rules$Code | Type %like% "118"]
-
 
 #add transit day
 td_90_ridership_records <-  td_90_ridership_records[,Date.and.Time := mdy_hms(Date.and.Time) #format
@@ -187,27 +186,57 @@ VMH_StartTime <- str_remove_all(start_date,"-")
 VMH_EndTime <- str_remove_all(end_date,"-")
 
 #paste0 the query
-VMH_Raw <- tbl(con,sql(paste0("select a.Time
-,a.Route
-,Boards
-,Alights
-,Trip
-,Vehicle_ID
-,Stop_Name
-,Stop_Id
-,Inbound_Outbound
-,Departure_Time
-,Latitude
-,Longitude
-,GPSStatus
-from avl.Vehicle_Message_History a (nolock)
-left join avl.Vehicle_Avl_History b
-on a.Avl_History_Id = b.Avl_History_Id
-where a.Route like '90%'
-and a.Time > '",VMH_StartTime,"'
-and a.Time < DATEADD(day,1,'",VMH_EndTime,"')"))) %>% collect()
+VMH_Raw <- tbl(
+  con,sql(
+    paste0(
+    "select a.Time
+    ,a.Route
+    ,Boards
+    ,Alights
+    ,Trip
+    ,Vehicle_ID
+    ,Stop_Name
+    ,Stop_Id
+    ,Inbound_Outbound
+    ,Departure_Time
+    ,Latitude
+    ,Longitude
+    ,GPSStatus
+    from avl.Vehicle_Message_History a (nolock)
+    left join avl.Vehicle_Avl_History b
+    on a.Avl_History_Id = b.Avl_History_Id
+    where a.Route like '90%'
+    and a.Time > '",VMH_StartTime,"'
+    and a.Time < DATEADD(day,1,'",VMH_EndTime,"')
+    
+    UNION
+    
+    select a.Time
+    ,a.Route
+    ,Boards
+    ,Alights
+    ,Trip
+    ,Vehicle_ID
+    ,Stop_Name
+    ,Stop_Id
+    ,Inbound_Outbound
+    ,Departure_Time
+    ,Latitude
+    ,Longitude
+    ,GPSStatus
+    from avl.Vehicle_Message_History a (nolock)
+    left join avl.Vehicle_Avl_History b
+    on a.Avl_History_Id = b.Avl_History_Id
+    where a.Time > '",VMH_StartTime,"'
+    and a.Time < DATEADD(day,1,'",VMH_EndTime,"')
+    and Vehicle_ID >= 1970
+    and Vehicle_ID <= 1999"
+    )#end paste
+    )#endsql
+  ) %>% #end tbl
+  collect()
 
-#set the DT's and keys
+#set the DT and keys
 setDT(VMH_Raw)
 
 #### VMH CLEANING ####
