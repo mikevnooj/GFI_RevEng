@@ -13,8 +13,8 @@ library(data.table)
 library(timeDate)
 
 #### INPUTS ####
-start <- "2020/06/01" #date in format "YYYY/mm/dd"
-end <- "2020/06/30" #date in format "YYYY/mm/dd"
+start <- "2020/07/01" #date in format "YYYY/mm/dd"
+end <- "2020/07/31" #date in format "YYYY/mm/dd"
 month <- FALSE
 daily <- TRUE
 
@@ -336,7 +336,7 @@ Local_by_Transit_Day
 Local_by_Service_Type_Wide
 Local_by_Service_Type_Long
 
-
+routesum_ridership
 fwrite(Local_by_Transit_Day,file = paste0("data//processed//",which_month,"_by_Day.csv"))
 fwrite(Local_by_Service_Type_Wide,file = paste0("data//processed//",which_month,"_by_Type_Wide.csv"))
 fwrite(Local_by_Service_Type_Long,file = paste0("data//processed//",which_month,"_by_Type_Long.csv"))
