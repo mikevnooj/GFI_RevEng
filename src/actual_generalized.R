@@ -13,8 +13,8 @@ library(data.table)
 library(timeDate)
 
 #### INPUTS ####
-start <- "2020/07/01" #date in format "YYYY/mm/dd"
-end <- "2020/07/31" #date in format "YYYY/mm/dd"
+start <- "2020/01/01" #date in format "YYYY/mm/dd"
+end <- "2020/01/31" #date in format "YYYY/mm/dd"
 month <- FALSE
 daily <- TRUE
 
@@ -28,7 +28,7 @@ ms_filepaths <- dir('data//raw//', full.names = T, pattern = "MONTHLY SUMMARY")
 
 MS_RulesImport <- function(ms_filepath){
   
-  ms_dirty <- ms_filepath %>%
+  ms_dirty <- ms_filepaths[which(ms_filepaths %ilike% "May")] %>%
     readLines()
   
   ms_first <- ms_dirty %>% 
@@ -38,26 +38,34 @@ MS_RulesImport <- function(ms_filepath){
     grep("excluded", .)-1
   
   ms_raw_rules <- data.frame(ms_dirty[ms_first:ms_last]) #read rules into dataframe
+  
   colnames(ms_raw_rules) <- "rules" #rename the column, just to make it easier to read
   
   ms_clean_ridership_rules <- ms_raw_rules %>%
-    separate_rows(names(.), sep = ",") %>%
-    filter(!rules == "\"\"") %>% # spread the columns into two columns so the code matches description
+    mutate(V2 = str_split(as.character(rules),"\",\""))%>%
+    unnest(V2) %>%
+    select(V2) %>%
+    filter(!V2 == "\"\"",
+           !V2 == "",
+           !V2 == "\"") %>%
+    pull() %>%
+    str_remove(coll("\"")) %>%
+    data.frame() %>%
+    `colnames<-`("rules") %>%
     mutate(ind = rep(c(1,2),length.out = n())) %>%
     group_by(ind) %>%
     mutate(id = row_number()) %>%
-    spread(ind, rules) %>%
+    spread(ind,rules) %>%
     select(-id) %>%
     rename(
-      Code = 1,
-      Description = 2
-    ) %>% # next two lines remove "" characters if we need them
-    mutate(Code = substr(Code, 2, nchar(Code)-1)) %>%
-    mutate(Description = substr(Description, 2, nchar(Description)-1));
+      Code = 1
+      ,Description = 2
+    )
+  ;
   ms_clean_ridership_rules
 }
 
-rules <- MS_RulesImport(ms_filepaths[which(ms_filepaths %ilike% which_month)])
+rules <- MS_RulesImport(ms_filepaths[which(ms_filepaths %ilike% "May")])
 
 
 #### ROUTESUM IMPORT ####
@@ -67,7 +75,7 @@ rs_filepaths <- dir('data//raw//', full.names = T, pattern = "EVENT SUMMARY")
 
 
 RS_RidershipImport <- function(rs_filepath){
-  rs_ridership_first <- rs_filepath %>%
+  rs_ridership_first <- rs_filepaths[3] %>%
     readLines() %>%
     grep("Ridership By Route", .) %>%
     first()
@@ -88,6 +96,7 @@ RS_RidershipImport <- function(rs_filepath){
 }
 
 routesum_ridership <- RS_RidershipImport(rs_filepaths[which(rs_filepaths %ilike% which_month)])
+
 
 #set as DT
 setDT(routesum_ridership,key = "Route")
@@ -292,7 +301,7 @@ TD_gap_data <- rolljointable[(as.POSIXct(TD_Time, tz = "UTC") < as.POSIXct(maxti
 TD_Bad_GPS <- rolljointable[GPSStatus != 2 | is.na(GPSStatus)]
 
 TD_Questionable_PCT <- rbind(TD_After_VMH,TD_gap_data,TD_Bad_GPS)[,.N/nrow(rolljointable)]
-TD_Questionable_PCT
+
 
 #### DO THE SPLIT ####
 #set boundaries
