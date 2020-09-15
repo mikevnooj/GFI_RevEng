@@ -324,6 +324,7 @@ rolljointable[,Service_Type := case_when(Transit_Day %in% as_date(holidays_satur
                                          weekdays(Transit_Day) %in% c("Monday","Tuesday","Wednesday","Thursday","Friday")~"Weekday",
                                          TRUE ~ weekdays(Transit_Day))]
 
+
 #add local route column
 rolljointable[, Local_Route := case_when(Latitude > north_boundary ~ "901",
                                          Latitude < south_boundary ~ "902",
@@ -335,10 +336,10 @@ rolljointable[, Local_Route := case_when(Latitude > north_boundary ~ "901",
 Local_by_Transit_Day <- dcast(rolljointable[Local_Route != 90,.(Ridership = .N),.(Local_Route, Transit_Day)]
       ,Transit_Day ~ Local_Route)
 
-Local_by_Service_Type_Wide <- dcast(rolljointable[Local_Route != 90,.(Ridership = .N),.(Local_Route,Service_Type)]
-      ,Local_Route ~ Service_Type)
+Local_by_Service_Type_Wide <- dcast(rolljointable[Local_Route != 90,.(Ridership = .N,Days = uniqueN(Transit_Day)),.(Local_Route,Service_Type)]
+      ,Local_Route ~ Service_Type,value.var = c("Ridership","Days")) 
 
-Local_by_Service_Type_Long <- rolljointable[Local_Route != 90, .(Ridership = .N),.(Service_Type,Local_Route)][order(Local_Route)]
+Local_by_Service_Type_Long <- rolljointable[
 
 Local_by_Transit_Day
 Local_by_Service_Type_Wide
