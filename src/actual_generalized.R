@@ -13,8 +13,8 @@ library(data.table)
 library(timeDate)
 
 #### INPUTS ####
-start <- "2020/08/01" #date in format "YYYY/mm/dd"
-end <- "2020/08/31" #date in format "YYYY/mm/dd"
+start <- "2020/03/01" #date in format "YYYY/mm/dd"
+end <- "2020/03/31" #date in format "YYYY/mm/dd"
 month <- FALSE
 daily <- TRUE
 
@@ -96,6 +96,7 @@ RS_RidershipImport <- function(rs_filepath){
 }
 
 routesum_ridership <- RS_RidershipImport(rs_filepaths[which(rs_filepaths %ilike% paste0("\\(",which_month))])
+
 
 #set as DT
 setDT(routesum_ridership,key = "Route")
@@ -301,6 +302,7 @@ TD_Bad_GPS <- rolljointable[GPSStatus != 2 | is.na(GPSStatus)]
 
 TD_Questionable_PCT <- rbind(TD_After_VMH,TD_gap_data,TD_Bad_GPS)[,.N/nrow(rolljointable)]
 
+TD_Questionable_PCT
 
 #### DO THE SPLIT ####
 #set boundaries
@@ -336,10 +338,14 @@ rolljointable[, Local_Route := case_when(Latitude > north_boundary ~ "901",
 Local_by_Transit_Day <- dcast(rolljointable[Local_Route != 90,.(Ridership = .N),.(Local_Route, Transit_Day)]
       ,Transit_Day ~ Local_Route)
 
-Local_by_Service_Type_Wide <- dcast(rolljointable[Local_Route != 90,.(Ridership = .N,Days = uniqueN(Transit_Day)),.(Local_Route,Service_Type)]
-      ,Local_Route ~ Service_Type,value.var = c("Ridership","Days")) 
+Local_by_Service_Type_Wide <- dcast(rolljointable[Local_Route != 90,.(Ridership = .N),.(Local_Route,Service_Type)]
+      ,Local_Route ~ Service_Type,value.var = c("Ridership")) 
 
 Local_by_Service_Type_Long <- rolljointable[
+  Local_Route != 90, .(Ridership = .N),.(Service_Type,Local_Route)
+][
+  order(Local_Route) 
+]
 
 Local_by_Transit_Day
 Local_by_Service_Type_Wide
