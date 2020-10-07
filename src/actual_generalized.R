@@ -13,8 +13,8 @@ library(data.table)
 library(timeDate)
 
 #### INPUTS ####
-start <- "2020/03/01" #date in format "YYYY/mm/dd"
-end <- "2020/03/31" #date in format "YYYY/mm/dd"
+start <- "2020/09/01" #date in format "YYYY/mm/dd"
+end <- "2020/09/30" #date in format "YYYY/mm/dd"
 month <- FALSE
 daily <- TRUE
 
@@ -131,7 +131,7 @@ TD_TransactionImport <- function(td_filepath){
   ; td_clean
 }
 
-td_data <- TD_TransactionImport(td_filepaths[which(td_filepaths %ilike% paste0("\\(",which_month))])
+td_data <- TD_TransactionImport(td_filepaths[which(td_filepaths %ilike% paste0("\\(",which_month))][2])
 #change to dt so we can rolljoin later
 td_dt <- data.table(td_data)
 setnames(td_dt,"Date and Time","Date.and.Time")
