@@ -13,8 +13,8 @@ library(data.table)
 library(timeDate)
 
 #### INPUTS ####
-start <- "2020/09/01" #date in format "YYYY/mm/dd"
-end <- "2020/09/30" #date in format "YYYY/mm/dd"
+start <- "2020/12/01" #date in format "YYYY/mm/dd"
+end <- "2020/12/31" #date in format "YYYY/mm/dd"
 month <- FALSE
 daily <- TRUE
 
@@ -73,6 +73,8 @@ rules <- MS_RulesImport(ms_filepaths[which(ms_filepaths %ilike% "May")])
 #this will have to be able to take multiple months
 rs_filepaths <- dir('data//raw//', full.names = T, pattern = "EVENT SUMMARY")
 
+this_month_rs <- rs_filepaths[which(rs_filepaths %ilike% paste0("\\(",which_month))]
+
 
 RS_RidershipImport <- function(rs_filepath){
   rs_ridership_first <- rs_filepaths[3] %>%
@@ -95,7 +97,7 @@ RS_RidershipImport <- function(rs_filepath){
   rs_clean
 }
 
-routesum_ridership <- RS_RidershipImport(rs_filepaths[which(rs_filepaths %ilike% paste0("\\(",which_month))])
+routesum_ridership <- RS_RidershipImport(this_month_rs[which(this_month_rs %like% format(end_date %m+% years(1),"%Y"))])
 
 
 #set as DT
@@ -131,7 +133,7 @@ TD_TransactionImport <- function(td_filepath){
   ; td_clean
 }
 
-td_data <- TD_TransactionImport(td_filepaths[which(td_filepaths %ilike% paste0("\\(",which_month))][2])
+td_data <- TD_TransactionImport(td_filepaths[which(td_filepaths %ilike% format(end_date %m+% years(1),"%Y"))])
 #change to dt so we can rolljoin later
 td_dt <- data.table(td_data)
 setnames(td_dt,"Date and Time","Date.and.Time")
@@ -176,7 +178,7 @@ setkey(td_90_ridership_records, Vehicle_ID, Transit_Day, jointime)
 #get the summary ridership and join it to routesum
 routesum_ridership[,c("Route",
                       "Ridership") #select two useful columns
-                   ][td_90_ridership_records[,.(ridership_td = .N),Route #get ridership by Route
+                   ][td_dt[Description %in% rules$Code | Type %like% "118",.(ridership_td = .N),Route #get ridership by Route
                                              ][order(as.numeric(Route))] #this is all joined to routesum
                      ][,ridership_diff := ridership_td-Ridership #do calcs on resulting DT
                        ][,percent_disagree := round((ridership_diff/Ridership)*100,digits=3)][]
@@ -214,7 +216,7 @@ VMH_Raw <- tbl(
     from avl.Vehicle_Message_History a (nolock)
     left join avl.Vehicle_Avl_History b
     on a.Avl_History_Id = b.Avl_History_Id
-    where a.Route like '90%'
+    where a.Route like '9%'
     and a.Time > '",VMH_StartTime,"'
     and a.Time < DATEADD(day,1,'",VMH_EndTime,"')
     
@@ -247,6 +249,8 @@ VMH_Raw <- tbl(
 
 #set the DT and keys
 setDT(VMH_Raw)
+
+
 
 #### VMH CLEANING ####
 # do transit day
@@ -348,7 +352,7 @@ Local_by_Service_Type_Long <- rolljointable[
 ]
 
 Local_by_Transit_Day
-Local_by_Service_Type_Wide
+Local_by_Service_Type_Wide %>% gt::gt()
 Local_by_Service_Type_Long
 
 
