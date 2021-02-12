@@ -196,6 +196,7 @@ con <- DBI::dbConnect(odbc::odbc(), Driver = "SQL Server", Server = "REPSQLP01VW
 VMH_StartTime <- str_remove_all(start_date,"-")
 VMH_EndTime <- str_remove_all(end_date,"-")
 
+
 #paste0 the query
 VMH_Raw <- tbl(
   con,sql(
